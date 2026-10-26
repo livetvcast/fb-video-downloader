@@ -1,104 +1,117 @@
- "use client";
+"use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-function isDirectVideoFile(raw: string) {
+function safeUrl(raw: string): URL | null {
   try {
-    const u = new URL(raw);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-    return /\.(mp4|webm|mov|m4v)(?:$|[?#])/i.test(u.pathname + u.search + u.hash);
-  } catch {
-    return false;
-  }
+    const u = new URL(raw.trim());
+    if (!["http:", "https:"].includes(u.protocol)) return null;
+    return u;
+  } catch { return null; }
+}
+
+function isFacebookHost(host: string) {
+  return host === "fb.watch" || host.endsWith(".fb.watch") ||
+    host === "facebook.com" || host.endsWith(".facebook.com");
+}
+
+function isDirectVideo(raw: string) {
+  const u = safeUrl(raw);
+  return !!u && /\.(mp4|webm|mov|m4v)$/i.test(u.pathname);
 }
 
 export default function Home() {
   const [url, setUrl] = useState("");
-  const [message, setMessage] = useState("");
-  const [direct, setDirect] = useState(false);
+  const [submitted, setSubmitted] = useState("");
+  const [notice, setNotice] = useState("");
 
-  function checkLink() {
-    setMessage("");
-    setDirect(false);
-    const trimmed = url.trim();
-    if (!trimmed) {
-      setMessage("Please paste a video URL first.");
+  const parsed = useMemo(() => safeUrl(submitted), [submitted]);
+  const facebook = !!parsed && isFacebookHost(parsed.hostname.toLowerCase());
+  const direct = !!parsed && isDirectVideo(submitted);
+  const embedUrl = facebook
+    ? `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(submitted)}&show_text=0&width=500`
+    : "";
+
+  function handleCheck() {
+    const clean = url.trim();
+    const u = safeUrl(clean);
+    if (!u) {
+      setNotice("একটি সঠিক https:// বা http:// লিংক দিন।");
+      setSubmitted("");
       return;
     }
-    try {
-      const parsed = new URL(trimmed);
-      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
-      if (isDirectVideoFile(trimmed)) {
-        setDirect(true);
-        setMessage("This looks like a direct video-file link. Use the buttons below; download behavior depends on the host.");
-      } else if (/facebook\.com|fb\.watch/i.test(parsed.hostname)) {
-        setMessage("This is a Facebook post/video link. This demo cannot extract private Facebook videos from a post URL. Open it in Facebook, or use an official download/export option for videos you own or have permission to save.");
-      } else {
-        setMessage("This does not look like a direct video-file URL. Paste a direct .mp4, .webm, .mov, or .m4v file URL.");
-      }
-    } catch {
-      setMessage("Please enter a valid http:// or https:// URL.");
+    if (!isFacebookHost(u.hostname.toLowerCase()) && !isDirectVideo(clean)) {
+      setNotice("এটি Facebook ভিডিও লিংক বা সরাসরি ভিডিও ফাইলের লিংক বলে মনে হচ্ছে না।");
+      setSubmitted("");
+      return;
     }
+    setSubmitted(clean);
+    setNotice("");
   }
 
   return (
     <main className="page">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="FB Video Helper home">
-          <span className="brandIcon">f</span>
-          <span>FB Video <b>Helper</b></span>
-        </a>
-        <span className="tag">MOBILE FRIENDLY</span>
+        <a className="brand" href="/"><span className="brandIcon">f</span><span>FB Video <b>Helper</b></span></a>
+        <span className="tag">PUBLIC VIDEO PREVIEW</span>
       </header>
 
       <section className="hero">
-        <div className="eyebrow"><span className="dot" /> SIMPLE • FAST • RESPONSIVE</div>
-        <h1>Video link <span>downloader</span></h1>
-        <p className="subtitle">A clean, simple tool for saving videos you own or are authorized to download.</p>
+        <div className="eyebrow"><span className="dot" /> SIMPLE • FAST • MOBILE READY</div>
+        <h1>Video link <span>helper</span></h1>
+        <p className="subtitle">Paste a Facebook video link to try the official embed preview, or use a direct video-file URL.</p>
 
         <div className="card">
-          <label htmlFor="videoUrl">Paste video URL</label>
+          <label htmlFor="videoUrl">Facebook video or direct file URL</label>
           <div className="inputWrap">
             <span className="linkIcon" aria-hidden="true">↗</span>
-            <input
-              id="videoUrl"
-              type="url"
-              inputMode="url"
-              placeholder="https://example.com/video.mp4"
-              value={url}
-              onChange={(e) => { setUrl(e.target.value); setMessage(""); setDirect(false); }}
-              onKeyDown={(e) => { if (e.key === "Enter") checkLink(); }}
-            />
-            {url && <button className="clear" onClick={() => { setUrl(""); setMessage(""); setDirect(false); }} aria-label="Clear URL">×</button>}
+            <input id="videoUrl" type="url" inputMode="url" placeholder="https://www.facebook.com/..." value={url}
+              onChange={e => { setUrl(e.target.value); setNotice(""); }}
+              onKeyDown={e => { if (e.key === "Enter") handleCheck(); }} />
+            {url && <button className="clear" onClick={() => { setUrl(""); setSubmitted(""); setNotice(""); }} aria-label="Clear URL">×</button>}
           </div>
-          <button className="primary" onClick={checkLink}><span>↓</span> Check video link</button>
-          {message && <div className={`notice ${direct ? "success" : ""}`} role="status">{message}</div>}
-          {direct && (
-            <div className="actions">
-              <a className="secondary" href={url.trim()} target="_blank" rel="noreferrer">▶ Open video</a>
-              <a className="primary download" href={url.trim()} download>↓ Download file</a>
+          <button className="primary" onClick={handleCheck}><span>⌕</span> Preview video</button>
+
+          {notice && <div className="notice" role="status">{notice}</div>}
+
+          {submitted && facebook && (
+            <div className="previewBlock">
+              <h2>Video preview</h2>
+              <div className="frameWrap">
+                <iframe src={embedUrl} title="Facebook public video preview" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share" allowFullScreen />
+              </div>
+              <a className="primary openFacebook" href={submitted} target="_blank" rel="noreferrer">Open on Facebook ↗</a>
+              <div className="notice">যদি প্রিভিউ না আসে, ভিডিওটি Public নাও হতে পারে বা Facebook embed অনুমতি বন্ধ থাকতে পারে। এই পেজ Facebook পোস্ট থেকে সরাসরি ভিডিও ফাইল বের করে না।</div>
+              <p className="smallNote">ডাউনলোডের জন্য ভিডিওর মালিকের অনুমতি ও Facebook-এর অনুমোদিত/উপলভ্য ডাউনলোড পদ্ধতি ব্যবহার করুন।</p>
             </div>
           )}
-          <p className="smallNote">Tip: a Facebook post URL is not the same as a direct video-file URL.</p>
+
+          {submitted && direct && (
+            <div className="previewBlock">
+              <h2>Video preview</h2>
+              <video className="videoPlayer" controls playsInline src={submitted}>Your browser does not support video playback.</video>
+              <div className="actions">
+                <a className="secondary" href={submitted} target="_blank" rel="noreferrer">▶ Open video</a>
+                <a className="primary download" href={submitted} download>↓ Download file</a>
+              </div>
+              <p className="smallNote">ডাউনলোড অপশনটি হোস্টিং সাইটের নিয়ম ও ব্রাউজারের সাপোর্টের ওপর নির্ভর করে।</p>
+            </div>
+          )}
+          <p className="smallNote">Never enter your Facebook password or session cookies into a downloader website.</p>
         </div>
 
         <div className="featureGrid">
-          <div className="feature"><span className="featureIcon">📱</span><div><b>Mobile ready</b><p>Designed for Android and small screens.</p></div></div>
+          <div className="feature"><span className="featureIcon">📱</span><div><b>Mobile ready</b><p>Made for Android and small screens.</p></div></div>
           <div className="feature"><span className="featureIcon">🔒</span><div><b>Privacy first</b><p>No Facebook password or session cookies requested.</p></div></div>
-          <div className="feature"><span className="featureIcon">⬇️</span><div><b>Direct links</b><p>Works with direct media links when the host permits it.</p></div></div>
+          <div className="feature"><span className="featureIcon">🎬</span><div><b>Preview first</b><p>Try Facebook's public video embed or direct video playback.</p></div></div>
         </div>
       </section>
 
       <section className="info">
-        <h2>How it works</h2>
-        <ol>
-          <li>Paste a direct video file URL.</li>
-          <li>Tap <b>Check video link</b>.</li>
-          <li>Open or download the file if the hosting website allows it.</li>
-        </ol>
-        <div className="warning"><b>About private Facebook groups</b><p>Facebook post links, especially private-group links, cannot reliably be converted into downloadable files by this standalone page. Facebook Login alone does not grant download access. Use Facebook’s official options or obtain the original file from its owner.</p></div>
+        <h2>Important limitations</h2>
+        <p>Facebook post links are not direct video-file links. The preview uses Facebook's official embed player and may only work for public videos that allow embedding. This website does not scrape Facebook or bypass private-group access controls. Facebook Login alone does not grant download permission. Use official download/export options for videos you own, or ask the owner for the original file.</p>
       </section>
-      <footer>© {new Date().getFullYear()} FB Video Helper <span>Built for personal, authorized use.</span></footer>
+      <footer>© {new Date().getFullYear()} FB Video Helper <span>For videos you own or are authorized to save.</span></footer>
     </main>
   );
 }

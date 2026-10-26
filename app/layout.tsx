@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "FB Video Helper",
-  description: "A simple, mobile-friendly video link helper for videos you own or are allowed to download."
+  description: "Preview Facebook videos and download direct video files you are authorized to save."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
